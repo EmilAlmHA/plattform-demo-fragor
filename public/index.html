@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frågelådan</title>
+<style>
+  :root {
+    --sky: #eaf5f7; --paper: #f4faf9; --surface: #ffffff; --ink: #0e3a52;
+    --soft: #4f7385; --sea: #4e93b3; --accent: #e2703a; --line: rgba(14, 58, 82, 0.14);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5;
+  }
+  header { background: linear-gradient(180deg, var(--sky), #e3f2f4); padding: 2rem 1.25rem 1.5rem; }
+  header div, main { max-width: 760px; margin: 0 auto; }
+  h1 { margin: 0 0 0.3rem; font-size: clamp(1.7rem, 5vw, 2.4rem); }
+  header p { margin: 0; color: var(--soft); }
+  main { padding: 1.25rem; }
+  form { display: flex; gap: 0.6rem; margin-bottom: 1.5rem; }
+  textarea {
+    flex: 1; font: inherit; font-size: 1.05rem; padding: 0.7rem 0.8rem; min-height: 3rem;
+    border: 1px solid var(--line); border-radius: 10px; resize: vertical; background: var(--surface); color: var(--ink);
+  }
+  button {
+    font: inherit; font-weight: 600; border: none; border-radius: 10px; cursor: pointer;
+    background: var(--accent); color: #fffaf6; padding: 0 1.2rem;
+  }
+  .count { color: var(--soft); font-size: 0.9rem; margin: 0 0 0.6rem; }
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+  li {
+    display: flex; gap: 0.9rem; align-items: center; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 12px; padding: 0.8rem 1rem; font-size: 1.1rem;
+  }
+  li.new { animation: pop 0.6s ease-out; }
+  @keyframes pop { from { background: #fde9dc; } to { background: var(--surface); } }
+  .vote {
+    flex: none; display: flex; flex-direction: column; align-items: center; min-width: 3.2rem;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--line); padding: 0.3rem 0.5rem;
+  }
+  .vote:disabled { color: var(--sea); border-color: var(--sea); cursor: default; }
+  .vote b { font-size: 1.15rem; }
+  .vote span { font-size: 0.72rem; font-weight: 500; }
+  .error { color: var(--accent); min-height: 1.2rem; margin: -1rem 0 1rem; font-size: 0.9rem; }
+  footer { text-align: center; color: var(--soft); font-size: 0.8rem; padding: 2rem 1rem; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Frågelådan</h1>
+    <p>Skicka en fråga om studentplattformen, eller rösta på någon annans.</p>
+  </div>
+</header>
+<main>
+  <form id="ask">
+    <textarea id="text" maxlength="280" placeholder="Din fråga..." required></textarea>
+    <button type="submit">Skicka</button>
+  </form>
+  <p class="error" id="error"></p>
+  <p class="count" id="count"></p>
+  <ul id="list"></ul>
+</main>
+<footer>Driftsatt på students.haxit.top med Node och PostgreSQL</footer>
+
+<script>
+  // Relative URLs, so the page works under /<project>/ on the platform.
+  const API = "api/questions";
+  const list = document.getElementById("list");
+  const seen = new Set();
+  let voted = new Set();
+  try { voted = new Set(JSON.parse(localStorage.getItem("voted") || "[]")); } catch (e) {}
+
+  function rememberVote(id) {
+    voted.add(id);
+    try { localStorage.setItem("voted", JSON.stringify([...voted])); } catch (e) {}
+  }
+
+  function render(questions) {
+    document.getElementById("count").textContent =
+      questions.length === 1 ? "1 fråga" : questions.length + " frågor";
+    list.replaceChildren(...questions.map((q) => {
+      const li = document.createElement("li");
+      if (seen.size && !seen.has(q.id)) li.className = "new";
+      const btn = document.createElement("button");
+      btn.className = "vote";
+      btn.disabled = voted.has(q.id);
+      btn.title = voted.has(q.id) ? "Du har röstat" : "Rösta";
+      btn.innerHTML = "<b></b><span>röster</span>";
+      btn.querySelector("b").textContent = q.votes;
+      btn.onclick = async () => {
+        btn.disabled = true;
+        rememberVote(q.id);
+        await fetch(API + "/" + q.id + "/vote", { method: "POST" });
+        load();
+      };
+      const text = document.createElement("div");
+      text.textContent = q.text;
+      li.append(btn, text);
+      return li;
+    }));
+    questions.forEach((q) => seen.add(q.id));
+  }
+
+  async function load() {
+    try {
+      const res = await fetch(API);
+      if (res.ok) render(await res.json());
+    } catch (e) {}
+  }
+
+  document.getElementById("ask").onsubmit = async (event) => {
+    event.preventDefault();
+    const box = document.getElementById("text");
+    const error = document.getElementById("error");
+    const res = await fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: box.value }),
+    });
+    if (res.ok) {
+      box.value = "";
+      error.textContent = "";
+      load();
+    } else {
+      error.textContent = (await res.json()).error || "Det gick inte att skicka.";
+    }
+  };
+
+  load();
+  setInterval(load, 3000);
+</script>
+</body>
+</html>
