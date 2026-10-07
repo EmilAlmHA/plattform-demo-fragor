@@ -1,0 +1,8 @@
+{
+  "name": "plattform-demo-fragor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Frågelåda för publiken, demo av studentplattformen",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "pg": "^8.13.0" }
+}
